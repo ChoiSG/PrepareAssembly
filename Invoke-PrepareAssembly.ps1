@@ -11,15 +11,8 @@ Function Invoke-PrepareAssembly{
         - covertToolsmith, mdsec, @domchell and his mind-blowing presentation (galaxy brain)
     
     TODO: 
-        - Include tools like confuserexCLI and nuget with the script. 
         - Review architecture & dotnetversion and implement correctly. Currently just using default values 
-        - Fix SharpGPOAbuse & ConfuserEx problem? 
-
-        - Some executables have same dll references with different versions. Just copying over 
-        these references in same folder will overwrite each dlls. This might be okay for compiling, will 
-        make obfuscation to fail. 
-
-        - Obfuscate - add modulepath if copyReference exists 
+        - Do some testing or create test cases? 
 #>
 
     Param(
