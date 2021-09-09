@@ -104,53 +104,62 @@ Function Invoke-PrepareAssembly{
     }
     
     Function checkCommand($cmdName){
-        try{
-            $cmdName | Out-Null
+        if(Get-Command $cmdName -ErrorAction SilentlyContinue){
+            return $true
         }
-        catch [System.Management.Automation.CommandNotFoundException]{
+        else{
             return $false
         }
-        return $true
     }
 
     <# TODO: Check necessary binaries and PATH. #>
     Function initCheck(){
-        $cmds = @('git.exe', 'nuget.exe', 'Confuser.CLI.exe')
+        $cmds = @('git.exe', 'nuget.exe', 'Confuser.CLI.exe', 'donut.exe')
 
         $downloadDir = New-Item -Path "utilTools" -ItemType Directory -Force
         Write-Host "[+] Creating Downloads directory $downloadDir" -ForegroundColor Green
 
         foreach($cmd in $cmds){
             if (-not(checkCommand($cmd))){
-                Write-Host "[-] $cmd does not exist in PATH."
-                Write-Host "[*] Downloading necessary files in 5 seconds ..."
-                Start-Sleep -Seconds 5 
+                Write-Host "[-] $cmd does not exist in PATH." -ForegroundColor Red
+                Write-Host "[*] Downloading necessary files in 5 seconds ..." -ForegroundColor Red
+                Start-Sleep -Seconds 5
+                
+                # Multiple commands might be missing. So don't use if/elseif/else 
                 
                 # Nuget CLI does not exist. Download 
                 if ($cmd.ToLower() -eq "nuget.exe"){
                     $nugetPath = Join-Path -Path $downloadDir -ChildPath $cmd
                     (New-Object System.Net.WebClient).DownloadFile("https://dist.nuget.org/win-x86-commandline/latest/nuget.exe", $nugetPath)
-                    Write-Host "[+] Downloaded $cmd in $nugetPath" -ForegroundColor Green
+                    Write-Host "[*] Downloaded $cmd in $nugetPath" -ForegroundColor Green
                 }
 
                 # ConfuserExCLI does not exist. Download & Unzip confuserex 
-                elseif ($cmd.tolower() -eq "confuser.cli.exe") {
+                if ($cmd.tolower() -eq "confuser.cli.exe") {
                     $confuserPath = Join-Path -Path $downloadDir -ChildPath "confuser.v1.4.1.zip"
                     (New-Object System.Net.WebClient).DownloadFile("https://github.com/mkaring/ConfuserEx/releases/download/v1.4.1/ConfuserEx-CLI.zip", $confuserPath)
-                    Write-Host "[+] Downloaded $cmd in $confuserPath" -ForegroundColor Green
+                    Expand-Archive -Path $confuserPath -DestinationPath $confuserPath.split('.')[0]  -Force 
 
-                    Expand-Archive -Path $confuserPath 
-                    Write-Host "[+] Unzipping $confuserPath ..."
+                    Write-Host "[*] Downloaded $cmd and unzipped in $confuserPath ..." -ForegroundColor Green
                 }
 
                 # Git CLI does not exist. Output github for windows releases 
-                elseif ($cmd.ToLower() -eq "git.exe"){
-                    Write-Host "[*] Download git from here: https://github.com/git-for-windows/git/releases/"
+                # I don't want to download stuff and install things on ppl's computer in the background 
+                if ($cmd.ToLower() -eq "git.exe"){
+                    Write-Host "[*] Download git from here: https://github.com/git-for-windows/git/releases/" -ForegroundColor Green
                 }
 
-                Write-Host "[*] Your Path: $($Env:Path)"
-                Write-Host "[*] Install and move necessasry binaries, or add necessary path to your PATH"
-                return 
+                if ($cmd.ToLower() -eq "donut.exe"){
+                    $donutPath = Join-Path -Path $downloadDir -ChildPath "donut.zip"
+                    (New-Object System.Net.WebClient).DownloadFile("https://github.com/TheWover/donut/releases/download/v0.9.3/donut_v0.9.3.zip", $donutPath)
+                    Expand-Archive -Path $donutPath -DestinationPath $donutPath.split('.')[0] -Force 
+                    
+                    Write-Host "[*] Downloaded donut and unzipped $donutPath" -ForegroundColor Green
+                }
+
+                Write-Host "[*] Your Path: $($Env:Path)" 
+                Write-Host "[*] Install or move necessary binaries and their DLLs to your PATH.`n[*] Or just add those paths into your PATH." -ForegroundColor Green
+                return 1
             }
 
             else{
@@ -218,8 +227,6 @@ Function Invoke-PrepareAssembly{
 
         $returnConfuserConfig
         return  
-        #return $references
-
     }
 
     # TODO: Implement Arch and Dotnet version 
@@ -376,9 +383,10 @@ Function Invoke-PrepareAssembly{
     }
 
     # https://github.com/TheWover/donut
-    Function donut ($donutArgs){
+    Function donut ($inFile, $donutArgs){
         Write-Host "[+] Uh, I'm just running donut at this point lol"
-        donut.exe $donutArgs
+        $finalDonutArgs = $inFile + " " + $donutArgs
+        donut.exe $finalDonutArgs
     }
 
     # TODO: Should probably make into a prompt and go step-by-step like a wizard 
@@ -454,10 +462,13 @@ Function Invoke-PrepareAssembly{
        ===================================================================================================
     #>
 
-    initCheck
+    if(initCheck -eq 1){
+        return 
+    }
 
     <# If jsonFile given, update the variables #>
     if($jsonFile){
+        # powershell ignores variable scope inside if statements?!
         $jsonData = (Get-Content -Raw -Path $jsonFile | ConvertFrom-Json)
         $outDir = $jsonData.outDir 
 
@@ -622,6 +633,23 @@ Function Invoke-PrepareAssembly{
             }
         }
 
+        else{
+            Write-Host "[-] Wrong parameter combination. Either give me 'inFile' or 'jsonFile' with 'key'. " -ForegroundColor Red
+            return 
+        }
+    }
+
+    if ($donut){
+        if($inFile){
+            Write-Host "[+] Donutting $inFile with default arguments" -ForegroundColor Green
+            $donutArgs = ""
+            donut.exe $inFile $donutArgs
+            Write-Host "`n[+] Output donutted file in current directory" -ForegroundColor Green 
+        }
+        elseif ($inFile -and $donutArgs) {
+            Write-Host "[+] Donutting $inFile with $donutArgs" -ForegroundColor Green
+            donut.exe $inFile $donutArgs 
+        }
         else{
             Write-Host "[-] Wrong parameter combination. Either give me 'inFile' or 'jsonFile' with 'key'. " -ForegroundColor Red
             return 
