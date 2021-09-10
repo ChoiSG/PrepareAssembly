@@ -1,6 +1,10 @@
 Function Invoke-PrepareAssembly{
 
 <#
+    Might want to git pull and start over. 
+    The sharpview problem still exists. 
+
+
     My first (more than 5 lines of) powershell script! - choi 
 
     You probably want to use an actual CI/CD pipeline instead of this scuffed script.
@@ -13,6 +17,10 @@ Function Invoke-PrepareAssembly{
     TODO: 
         - Review architecture & dotnetversion and implement correctly. Currently just using default values 
         - Do some testing or create test cases? 
+        - Add error/warning message related with .NET version and confuserex? 
+    
+    Notes:
+        - Obfuscation with rules might fail due to wrong .NET version. (ex. assembly uses function from .NET 4.0, but compiled in 3.5) 
 #>
 
     Param(
@@ -49,6 +57,9 @@ Function Invoke-PrepareAssembly{
 @"
 <project outputDir="{{OUTPUT_DIR}}" baseDir="{{BASE_DIR}}" xmlns="http://www.google.com">
     <packer id="compressor" />  
+    <rule pattern="true" preset="{{LEVEL}}" inherit="false">
+        <protection id="constants" /> 
+    </rule>
     <module path="{{MODULE_PATH}}" />
     <!-- CopyReferences will add more modules and close off the </project> element  -->
 "@,
@@ -112,7 +123,7 @@ Function Invoke-PrepareAssembly{
         }
     }
 
-    <# TODO: Check necessary binaries and PATH. #>
+    
     Function initCheck(){
         $cmds = @('git.exe', 'nuget.exe', 'Confuser.CLI.exe', 'donut.exe')
 
@@ -182,6 +193,7 @@ Function Invoke-PrepareAssembly{
 
         $references = [System.Collections.ArrayList]@()
 
+        # Go through .csproj and look for "hintPath". If such references exist, copy those dll files to outDir.
         foreach ($projectFile in $projectFiles) {
             $projectXml = [xml](Get-Content $projectFile.FullName)
             $projectDir = $projectFile.DirectoryName
@@ -221,9 +233,9 @@ Function Invoke-PrepareAssembly{
             }
         }
 
+        # Modify the confuser Config and return the complete confuser config back
         $finishConfig = "</project>"
         $returnConfuserConfig = $confuserConfig + "`n" + $finishConfig
-        Write-Host "[+] Final Config = $returnConfuserConfig"
 
         $returnConfuserConfig
         return  
@@ -249,8 +261,7 @@ Function Invoke-PrepareAssembly{
         replace("{{OUTPUT_DIR}}", $outDir).
         replace("{{OUTPUT_TYPE}}", $outputType)
 
-        Write-Host "[DEBUG] Build options: $msbuildOptions"
-
+        #Write-Host "[DEBUG] Build options: $msbuildOptions"
 
         # Actually building 
         Write-Host "[+] Building $slnPath ..." 
@@ -264,21 +275,17 @@ Function Invoke-PrepareAssembly{
             Write-Host "ERROR: $output"
             return
         }
-
-        #Write-Host "[+] Copying References for obfuscation... "
-        #copyReferences $slnPath $outDir $confuserConfig
         
         Write-Host "[+] Compiling successful: $([System.IO.Path]::GetFileNameWithoutExtension($slnPath))`n`n" -ForegroundColor Green
     }
 
     <# Create "Confused" directory and then  #>
     Function obfuscate ($inFile, $outDir, $slnPath, $confuserConfig, $level) {
-
-        Write-Host "[+] Obfuscation level: $level"
+        #Write-Host "[+] Obfuscation level: $level"
 
         # Error checking for inFile. Does it exist?
         if (-not (Test-Path -Path $inFile -PathType leaf) -or -not(Test-Path -Path $outDir)){
-            Write-Host "[-] Obfuscate failed. Eiter $inFile or $outDir does not exist" -ForegroundColor Red 
+            Write-Host "[-] Eiter $inFile or $outDir does not exist" -ForegroundColor Red 
             return 
         }
 
@@ -311,39 +318,39 @@ Function Invoke-PrepareAssembly{
             Write-Host "[*] Confuserex config file not provided. Using the default one." 
 
             $baseDir = Split-Path -Path $inFile
-            $finalConfuserConfig = $confuserConfig.
+            $updatedConfuserConfig = $confuserConfig.
             Replace("{{OUTPUT_DIR}}", $confusedDir).
             Replace("{{BASE_DIR}}", $baseDir).
             Replace("{{MODULE_PATH}}", $inFile).
             Replace("{{LEVEL}}", $level)
-            
-
-            #$references = copyReferences $slnPath $outDir
-            #foreach ($item in $references) {
-            #    Write-Host $references
-            #}
-        
-            # So we should just use current directory or something, or create a new directory 
         }
-
-        #$confuserConfigFilePath = $confusedDir + "\" + $(Split-Path $inFile -leaf) + ".crproj"
-        #$finalConfuserConfig | Out-File -FilePath $confuserConfigFilePath
 
         # Updating confuser config with references, if they exist. 
         # powershell weird with returning result of all commands and then the function return value wtf 
-        $finalConfuserConfig = copyReferences $slnPath $outDir $finalConfuserConfig | Select-Object -Last 1
+        $finalConfuserConfig = copyReferences $slnPath $outDir $updatedConfuserConfig | Select-Object -Last 1
 
         $confuserConfigFilePath = $confusedDir + "\" + $(Split-Path $inFile -leaf) + ".crproj"
         $finalConfuserConfig | Out-File -FilePath $confuserConfigFilePath
-
         
-        Confuser.CLI.exe -n $confuserConfigFilePath | Out-Null
+        Confuser.CLI.exe -n $confuserConfigFilePath 
 
+        # Remove me TODO 
+        return
+
+        # If first confuser fails, it might be because of copied reference. Retry without them.
         if ($LastExitCode -ne 0)
         {
-            Write-Host "[-] Confuser cli obfuscation failed" -ForegroundColor Red 
-            Write-Host $output
-            return
+            $updatedConfuserConfig = $updatedConfuserConfig + "`n</project>"
+            $updatedConfuserConfig | Out-File -FilePath $confuserConfigFilePath
+            Write-Host "[+] Retrying..." -ForegroundColor Green 
+            Confuser.CLI.exe -n $confuserConfigFilePath 
+
+            # If second confuser fails, I have no idea. Exit. 
+            if ($LastExitCode -ne 0){
+                Write-Host "[-] Confuser cli obfuscation failed" -ForegroundColor Red 
+                Write-Host "[-] Suggest manually obfuscaating using ConfuserEx GUI" -ForegroundColor Red
+                return  
+            }
         }
         else{
             Write-Host "[+] Obfuscation successful: $confusedDir\$(Split-Path -Path $inFile -Leaf)" -ForegroundColor Green 
@@ -557,7 +564,7 @@ Function Invoke-PrepareAssembly{
 
         # Obufscate specific tool inside jsonFile 
         if ($jsonFile -and $toolName){
-            Write-Host "[+] Default confuserConfig = $confuserConfig"
+            #Write-Host "[+] Default confuserConfig = $confuserConfig"
             foreach ($inFile in $inFiles) {
                 if( $inFile.ToLower().Contains( $toolName.ToLower())) {
                     if ($inFile.EndsWith('.dll') -or $inFile.EndsWith('.exe')){
@@ -572,7 +579,7 @@ Function Invoke-PrepareAssembly{
 
         # Obfuscate all tools inside jsonFile 
         elseif($jsonFile){
-            Write-Host "[+] Default confuserConfig = $confuserConfig"
+            #Write-Host "[+] Default confuserConfig = $confuserConfig"
             foreach ($inFile in $inFiles) {
                 foreach ($toolName in ($jsonData.tools.Name).ToLower()) {
                     if ($inFile.ToLower().Contains($toolName.ToLower())) {
