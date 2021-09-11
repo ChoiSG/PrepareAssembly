@@ -6,7 +6,7 @@
             "gitLink": "https://github.com/GhostPack/Rubeus",
             "slnPath": "Rubeus\\Rubeus.sln",
             "arch": "Any CPU",
-            "dotnetVersion": "",
+            "dotnetVersion": "v4.0",
             "outputType": "Exe"
         },
         {
@@ -14,7 +14,7 @@
             "gitLink": "https://github.com/GhostPack/Seatbelt",
             "slnPath": "Seatbelt\\Seatbelt.sln",
             "arch": "Any CPU",
-            "dotnetVersion": "",
+            "dotnetVersion": "v3.5",
             "outputType": "Exe"
         },
         {
@@ -22,7 +22,7 @@
             "gitLink": "https://github.com/BloodHoundAD/SharpHound3",
             "slnPath": "SharpHound3\\SharpHound3.sln",
             "arch": "Any CPU",
-            "dotnetVersion": "",
+            "dotnetVersion": "v4.5.2",
             "outputType": "Exe"
         },
         {
@@ -30,7 +30,7 @@
             "gitLink": "https://github.com/tevora-threat/SharpView",
             "slnPath": "SharpView\\SharpView.sln",
             "arch": "Any CPU",
-            "dotnetVersion": "",
+            "dotnetVersion": "v4.5.2",
             "outputType": "Exe"
         },
         {
@@ -38,7 +38,7 @@
             "gitLink": "https://github.com/GhostPack/SharpUp",
             "slnPath": "SharpUp\\SharpUp.sln",
             "arch": "Any CPU",
-            "dotnetVersion": "",
+            "dotnetVersion": "v3.5",
             "outputType": "Exe"
         },
         {
@@ -46,7 +46,7 @@
             "gitLink": "https://github.com/FSecureLABS/SharpGPOAbuse",
             "slnPath": "SharpGPOAbuse\\SharpGPOAbuse.sln",
             "arch": "Any CPU",
-            "dotnetVersion": "",
+            "dotnetVersion": "v4.0",
             "outputType": "Exe"
         },
         {
@@ -54,7 +54,7 @@
             "gitLink": "https://github.com/rasta-mouse/ThreatCheck",
             "slnPath": "ThreatCheck\\ThreatCheck\\ThreatCheck.sln",
             "arch": "Any CPU",
-            "dotnetVersion": "",
+            "dotnetVersion": "v4.0",
             "outputType": "Exe"
         },
         {
@@ -62,7 +62,7 @@
             "gitLink": "https://github.com/djhohnstein/SharpChromium",
             "slnPath": "SharpChromium\\SharpChromium.sln",
             "arch": "Any CPU",
-            "dotnetVersion": "",
+            "dotnetVersion": "v4.0",
             "outputType": "Exe"
         },
         {
@@ -70,7 +70,7 @@
             "gitLink": "https://github.com/GhostPack/SafetyKatz",
             "slnPath": "SafetyKatz\\SafetyKatz.sln",
             "arch": "Any CPU",
-            "dotnetVersion": "",
+            "dotnetVersion": "v3.5",
             "outputType": "Exe"
         }
 

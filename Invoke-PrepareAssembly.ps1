@@ -5,7 +5,7 @@ Function Invoke-PrepareAssembly{
     The sharpview problem still exists. 
 
 
-    My first (more than 5 lines of) powershell script! - choi 
+    My first powershell script! (that is more than 5 lines!) - choi 
 
     You probably want to use an actual CI/CD pipeline instead of this scuffed script.
 
@@ -14,13 +14,9 @@ Function Invoke-PrepareAssembly{
         - https://github.com/FuzzySecurity/Sharp-Suite/blob/master/DiscerningFinch - For environmental keying and decrypting 
         - covertToolsmith, mdsec, @domchell and his mind-blowing presentation (galaxy brain)
     
-    TODO: 
-        - Review architecture & dotnetversion and implement correctly. Currently just using default values 
-        - Do some testing or create test cases? 
-        - Add error/warning message related with .NET version and confuserex? 
-    
     Notes:
         - Obfuscation with rules might fail due to wrong .NET version. (ex. assembly uses function from .NET 4.0, but compiled in 3.5) 
+        - Obfuscation might fail from different combinations of rules 
 #>
 
     Param(
@@ -52,13 +48,24 @@ Function Invoke-PrepareAssembly{
         [Parameter(Mandatory=$false, HelpMessage='Output type of the assembly. exe or dll. Default is exe.')]
         [string] $outputType = "exe",
 
+        [Parameter(Mandatory=$false, HelpMessage='Dotnet version. Default is 4.0')]
+        [string] $dotnetVersion = "v4.0",
+
         [Parameter(Mandatory=$false, HelpMessage='ConfuserEx configuration XML file path. If not provided, use a default one.')]
         [string] $confuserConfig = 
 @"
 <project outputDir="{{OUTPUT_DIR}}" baseDir="{{BASE_DIR}}" xmlns="http://www.google.com">
     <packer id="compressor" />  
     <rule pattern="true" preset="{{LEVEL}}" inherit="false">
-        <protection id="constants" /> 
+        <protection id="anti ildasm" />
+        <protection id="anti debug" action="remove" /> <!-- this breaks Assembly.Load. Maybe just use donut?  -->
+        <protection id="anti dump" />
+        <protection id="anti tamper" action="remove" /> <!-- this breaks Assembly.Load. Maybe just use donut?  -->
+        <protection id="invalid metadata" />
+        <protection id="resources" />
+        <protection id="constants" />
+        <protection id="ctrl flow" />
+        <protection id="rename" action="remove" /> <!-- This just killed seatbelt for some reason --> 
     </rule>
     <module path="{{MODULE_PATH}}" />
     <!-- CopyReferences will add more modules and close off the </project> element  -->
@@ -237,12 +244,11 @@ Function Invoke-PrepareAssembly{
         $finishConfig = "</project>"
         $returnConfuserConfig = $confuserConfig + "`n" + $finishConfig
 
-        $returnConfuserConfig
-        return  
+        return $returnConfuserConfig
     }
 
     # TODO: Implement Arch and Dotnet version 
-    Function compile ($slnPath, $outDir, $arch, $outputType){
+    Function compile ($slnPath, $outDir, $arch, $outputType, $dotnetVersion){
         Write-Host "[+] Compiling $slnPath ..."
 
         if(-not (Test-Path $slnPath -PathType Leaf)){
@@ -254,19 +260,21 @@ Function Invoke-PrepareAssembly{
         nuget restore $slnPath 2>&1 | Out-Null 
 
         # TODO: Implement /p:TargetFrameworkVersion and OutputType (Exe, Library)
-        $msbuildTemplate = "{{SOLUTION_PATH}} /p:Platform=`'{{ARCH}}`' /p:OutputPath=`'{{OUTPUT_DIR}}`' /p:DebugSymbols=false /p:DebugType=None /p:OutputType={{OUTPUT_TYPE}}"
+        $msbuildTemplate = "{{SOLUTION_PATH}} /p:Platform=`'{{ARCH}}`' /p:OutputPath=`'{{OUTPUT_DIR}}`' /p:DebugSymbols=false /p:DebugType=None /p:OutputType={{OUTPUT_TYPE}} /p:TargetFrameworkVersion={{DOTNETVERSION}}"
         $msbuildOptions = $msbuildTemplate.
         replace("{{SOLUTION_PATH}}", $slnPath).
         replace("{{ARCH}}", $arch).
         replace("{{OUTPUT_DIR}}", $outDir).
-        replace("{{OUTPUT_TYPE}}", $outputType)
+        replace("{{OUTPUT_TYPE}}", $outputType).
+        replace("{{DOTNETVERSION}}", $dotnetVersion)
 
-        #Write-Host "[DEBUG] Build options: $msbuildOptions"
+        Write-Host "[*] Build options: $msbuildOptions"
 
         # Actually building 
         Write-Host "[+] Building $slnPath ..." 
         $msbuild = (Find-MsBuild).Path[0]
 
+        #$output = Invoke-Expression "& `"$msbuild`" $msbuildOptions"
         $output = Invoke-Expression "& `"$msbuild`" $msbuildOptions" | Out-Null
 
         if ($LastExitCode -ne 0)
@@ -332,24 +340,28 @@ Function Invoke-PrepareAssembly{
         $confuserConfigFilePath = $confusedDir + "\" + $(Split-Path $inFile -leaf) + ".crproj"
         $finalConfuserConfig | Out-File -FilePath $confuserConfigFilePath
         
-        Confuser.CLI.exe -n $confuserConfigFilePath 
-
-        # Remove me TODO 
-        return
+        Confuser.CLI.exe -n $confuserConfigFilePath | Out-Null
+        # debug
+        #Confuser.CLI.exe -n $confuserConfigFilePath 
 
         # If first confuser fails, it might be because of copied reference. Retry without them.
         if ($LastExitCode -ne 0)
         {
             $updatedConfuserConfig = $updatedConfuserConfig + "`n</project>"
             $updatedConfuserConfig | Out-File -FilePath $confuserConfigFilePath
-            Write-Host "[+] Retrying..." -ForegroundColor Green 
-            Confuser.CLI.exe -n $confuserConfigFilePath 
+            Write-Host "[+] First try failed. Retrying..." -ForegroundColor Red
+            Confuser.CLI.exe -n $confuserConfigFilePath | Out-Null
+            # debug
+            #Confuser.CLI.exe -n $confuserConfigFilePath 
 
             # If second confuser fails, I have no idea. Exit. 
             if ($LastExitCode -ne 0){
                 Write-Host "[-] Confuser cli obfuscation failed" -ForegroundColor Red 
                 Write-Host "[-] Suggest manually obfuscaating using ConfuserEx GUI" -ForegroundColor Red
                 return  
+            }
+            else{
+                Write-Host "[+] 2nd try succeeded" -ForegroundColor Green
             }
         }
         else{
@@ -527,7 +539,7 @@ Function Invoke-PrepareAssembly{
             foreach ($tool in $jsonData.tools) {
                 if($toolName.ToLower() -like ($tool.Name).ToLower()){
                     $slnPath = Join-Path -Path $outDir -childPath $tool.slnPath
-                    compile $slnPath $outDir $tool.arch $tool.outputType
+                    compile $slnPath $outDir $tool.arch $tool.outputType $tool.dotnetVersion
                 }
             }
         }
@@ -536,13 +548,17 @@ Function Invoke-PrepareAssembly{
         elseif ($jsonFile){
             foreach ($tool in $jsonData.tools) {
                 $slnPath = Join-Path -Path $outDir -childPath $tool.slnPath
-                compile $slnPath $outDir $tool.arch $tool.outputType
+                compile $slnPath $outDir $tool.arch $tool.outputType $tool.dotnetVersion
             }
         }
 
         # Compile specific tool the user wants 
         elseif(-not $jsonFile){
-            compile $slnPath $outdir $arch $outputType
+            #if(-not ($slnPath -or $outDir -or $arch -or $outputType -or $dotnetVersion)){
+            #    Write-Host "[-] Need slnPath, outDir, arch, outputType, and dotnetVersion." -ForegroundColor Red
+            #    Write-Host "[-] Wrong parameter combination. Exiting." -ForegroundColor Red 
+            #}
+            compile $slnPath $outdir $arch $outputType $dotnetVersion
         }
 
         else{
@@ -571,6 +587,7 @@ Function Invoke-PrepareAssembly{
                         $toolslnPath = $jsonData.tools | where{$_.Name -eq $toolName} | Select-Object -ExpandProperty slnPath
                         $finalToolslnPath = Join-Path -Path $outDir -ChildPath $toolslnPath
                         $inFile = Join-Path -Path $outDir -ChildPath $inFile
+
                         obfuscate $inFile $outDir $finalToolslnPath $confuserConfig $level 
                     }
                 }
@@ -586,6 +603,7 @@ Function Invoke-PrepareAssembly{
                         $inFile = Join-Path -Path $outDir -ChildPath $inFile
                         $toolslnPath = $jsonData.tools | where{$_.Name -eq $toolName} | Select-Object -ExpandProperty slnPath
                         $finalToolslnPath = Join-Path -Path $outDir -ChildPath $toolslnPath
+
                         Write-Host "[+] Obfuscating $inFile" 
                         obfuscate $inFile $outDir $finalToolslnPath $confuserConfig $level 
                     }
