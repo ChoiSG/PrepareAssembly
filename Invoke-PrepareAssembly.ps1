@@ -223,7 +223,7 @@ Function Invoke-PrepareAssembly{
                 Write-Host "[+] $cmd is in PATH"
             }
 
-            return
+            return 1
         }
     
         # Check msbuild.exe executable. Grab the first one if multiple found. 
