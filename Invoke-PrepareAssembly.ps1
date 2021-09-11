@@ -216,12 +216,14 @@ Function Invoke-PrepareAssembly{
 
                 Write-Host "[*] Your Path: $($Env:Path)" 
                 Write-Host "[*] Install or move necessary binaries and their DLLs to your PATH.`n[*] Or just add those paths into your PATH." -ForegroundColor Green
-                return 1
+                
             }
 
             else{
                 Write-Host "[+] $cmd is in PATH"
             }
+
+            return
         }
     
         # Check msbuild.exe executable. Grab the first one if multiple found. 
