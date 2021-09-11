@@ -178,7 +178,7 @@ Function Invoke-PrepareAssembly{
 
         $cmds = @('git.exe', 'nuget.exe', 'Confuser.CLI.exe', 'donut.exe')
 
-        $downloadDir = New-Item -Path "utilTools" -ItemType Directory -Force
+        $downloadDir = New-Item -Path "utilTools" -ItemType Directory -Force | Out-Null
         Write-Host "[+] Creating Downloads directory $downloadDir" -ForegroundColor Green
 
         foreach($cmd in $cmds){
@@ -357,7 +357,7 @@ Function Invoke-PrepareAssembly{
         # Error check here 
         if(-not (Test-Path -Path $(Join-Path -Path $outDir -ChildPath "Confused"))){
             try{
-                New-Item -Path $outDir -Name "Confused" -ItemType "Directory" -Force
+                New-Item -Path $outDir -Name "Confused" -ItemType "Directory" -Force | Out-Null
                 Write-Host "[+] Created Confused directory: $confusedDir"
             }
             catch{
@@ -550,7 +550,7 @@ Function Invoke-PrepareAssembly{
 
         if(!(Test-Path -Path $jsonData.outDir)){
             Write-Host "[-] Path does not exist. Creating path."
-            New-Item -Path $jsonData.outDir -ItemType "Directory"
+            New-Item -Path $jsonData.outDir -ItemType "Directory" | Out-Null
         }
     }
     
