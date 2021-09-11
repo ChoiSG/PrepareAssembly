@@ -169,8 +169,12 @@ Function Invoke-PrepareAssembly{
     }
 
     # Initial check - See if required binaries are inside current PATH. If not, download and suggest. 
-    # Hardcoding URLs is a bad idea 
+    # Return: 
+    #   - 0 : All commands exist
+    #   - 1 : Some command doesn't exist
     Function initCheck(){
+        $initCheckResult = 0 
+
         $cmds = @('git.exe', 'nuget.exe', 'Confuser.CLI.exe', 'donut.exe')
 
         $downloadDir = New-Item -Path "utilTools" -ItemType Directory -Force
@@ -178,59 +182,71 @@ Function Invoke-PrepareAssembly{
 
         foreach($cmd in $cmds){
             if (-not(checkCommand($cmd))){
+                # If one command doesn't exist, function returns "1" - fail 
+                $initCheckResult = 1 
+
                 Write-Host "[-] $cmd does not exist in PATH." -ForegroundColor Red
                 Write-Host "[*] Downloading necessary files in 5 seconds ..." -ForegroundColor Red
                 Start-Sleep -Seconds 5
-                
-                # Multiple commands might be missing. So don't use if/elseif/else 
-                
-                # Nuget CLI does not exist. Download 
-                if ($cmd.ToLower() -eq "nuget.exe"){
-                    $nugetPath = Join-Path -Path $downloadDir -ChildPath $cmd
-                    (New-Object System.Net.WebClient).DownloadFile("https://dist.nuget.org/win-x86-commandline/latest/nuget.exe", $nugetPath)
-                    Write-Host "[*] Downloaded $cmd in $nugetPath" -ForegroundColor Green
-                }
 
-                # ConfuserExCLI does not exist. Download & Unzip confuserex 
-                if ($cmd.tolower() -eq "confuser.cli.exe") {
-                    $confuserPath = Join-Path -Path $downloadDir -ChildPath "confuser.v1.4.1.zip"
-                    (New-Object System.Net.WebClient).DownloadFile("https://github.com/mkaring/ConfuserEx/releases/download/v1.4.1/ConfuserEx-CLI.zip", $confuserPath)
-                    Expand-Archive -Path $confuserPath -DestinationPath $confuserPath.split('.')[0]  -Force 
-
-                    Write-Host "[*] Downloaded $cmd and unzipped in $confuserPath ..." -ForegroundColor Green
-                }
-
-                # Git CLI does not exist. Output github for windows releases 
-                # I don't want to download stuff and install things on ppl's computer in the background 
-                if ($cmd.ToLower() -eq "git.exe"){
-                    Write-Host "[*] Download git from here: https://github.com/git-for-windows/git/releases/" -ForegroundColor Green
-                }
-
-                if ($cmd.ToLower() -eq "donut.exe"){
-                    $donutPath = Join-Path -Path $downloadDir -ChildPath "donut.zip"
-                    (New-Object System.Net.WebClient).DownloadFile("https://github.com/TheWover/donut/releases/download/v0.9.3/donut_v0.9.3.zip", $donutPath)
-                    Expand-Archive -Path $donutPath -DestinationPath $donutPath.split('.')[0] -Force 
+                # Download, unzip, etc. Depending on which commands are missing 
+                switch ($cmd.ToLower()) {
+                    "nuget.exe" {
+                        $nugetPath = Join-Path -Path $downloadDir -ChildPath $cmd
+                        (New-Object System.Net.WebClient).DownloadFile("https://dist.nuget.org/win-x86-commandline/latest/nuget.exe", $nugetPath)
+                        Write-Host "[*] Downloaded $cmd in $nugetPath" 
+                      }
                     
-                    Write-Host "[*] Downloaded donut and unzipped $donutPath" -ForegroundColor Green
-                }
+                    "confuser.cli.exe" {
+                        $confuserPath = Join-Path -Path $downloadDir -ChildPath "confuser.v1.4.1.zip"
+                        (New-Object System.Net.WebClient).DownloadFile("https://github.com/mkaring/ConfuserEx/releases/download/v1.4.1/ConfuserEx-CLI.zip", $confuserPath)
+                        Expand-Archive -Path $confuserPath -DestinationPath $confuserPath.split('.')[0]  -Force 
+    
+                        Write-Host "[*] Downloaded $cmd and unzipped in $confuserPath ..." 
+                    }
+                    "git.exe" {
+                        Write-Host "[*] Download git from here: https://github.com/git-for-windows/git/releases/"
+                    }
 
-                Write-Host "[*] Your Path: $($Env:Path)" 
-                Write-Host "[*] Install or move necessary binaries and their DLLs to your PATH.`n[*] Or just add those paths into your PATH." -ForegroundColor Green
-                
+                    "donut.exe" {
+                        $donutPath = Join-Path -Path $downloadDir -ChildPath "donut.zip"
+                        (New-Object System.Net.WebClient).DownloadFile("https://github.com/TheWover/donut/releases/download/v0.9.3/donut_v0.9.3.zip", $donutPath)
+                        Expand-Archive -Path $donutPath -DestinationPath $donutPath.split('.')[0] -Force 
+                        
+                        Write-Host "[*] Downloaded donut and unzipped $donutPath" 
+                    }
+                }           
             }
 
+            # Cmd exists, we are good. 
             else{
-                Write-Host "[+] $cmd is in PATH"
+                Write-Host "[+] $cmd is in PATH" -ForegroundColor Green 
+                # no new line if cmd exists
+                continue 
             }
 
+            Write-Host ""
+        }
+
+        $msbuild = (Find-MsBuild).Path[0]
+        if(-not $msBuild){
+            Write-Host "[-] Msbuild does not exist" -ForegroundColor Red 
+            return 1 
+        }
+
+        Write-Host "[+] msBuild.exe location: $msBuild" -ForegroundColor Green 
+
+        if($initCheckResult -eq 1){
+            Write-Host "[*] Your Path: $($Env:Path)" 
+            Write-Host "[*] Install or move necessary binaries and their DLLs to your PATH.`n[*] Or just add those paths into your PATH." -ForegroundColor Green
             return 1
         }
     
         # Check msbuild.exe executable. Grab the first one if multiple found. 
-        $msbuild = (Find-MsBuild).Path[0]
-        Write-Host "[+] $msbuild is in PATH" 
-    
-        Write-Host "[+] All necessary cmds are here. Good to go.`n`n"
+        Write-Host "`n[+] All necessary cmds are here. Good to go.`n" -ForegroundColor Green
+        Write-Host "------------------------------------------------------------`n"
+
+        return 0 
     }
 
     <# https://stackoverflow.com/questions/5313719/how-to-find-reference-path-via-csproject-file #>
