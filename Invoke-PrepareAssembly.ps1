@@ -1,23 +1,61 @@
 Function Invoke-PrepareAssembly{
-
 <#
-    Might want to git pull and start over. 
-    The sharpview problem still exists. 
+    .DESCRIPTION
+    Git clone, compile, obfuscate, and encrypt .NET assemblies. 
+    Requires git.exe, msbuild.exe, confuser.cli.exe to be in PATH. 
 
+    .EXAMPLE 
+    PS> Invoke-PrepareAssembly -jsonfile ./tools.json -gitclone -compile -obfuscate -encrypt -key "encryptionkey"
+    Git clone, compile, obfuscate, and encrypt assemblies inside tools.json, 
+    using output directory inside the json 
 
-    My first powershell script! (that is more than 5 lines!) - choi 
+    .EXAMPLE 
+    PS> Invoke-PrepareAssembly -jsonfile ./tools.json -toolName Rubeus -gitclone -compile -obfuscate 
+    Git clone, compile, obfuscate specific tool from tools.json 
 
-    You probably want to use an actual CI/CD pipeline instead of this scuffed script.
+    .EXAMPLE 
+    PS> Invoke-PrepareAssembly -jsonfile ./tools.json -toolName Rubeus -obfuscate 
+    Obfuscate specific tool from tools.json file 
 
-    All credits goes to : 
-        - https://github.com/Aetsu/OffensivePipeline. This is Pretty much a (scuffed) powershell port of OffensivePipeline 
-        - https://github.com/FuzzySecurity/Sharp-Suite/blob/master/DiscerningFinch - For environmental keying and decrypting 
-        - covertToolsmith, mdsec, @domchell and his mind-blowing presentation (galaxy brain)
-    
-    Notes:
-        - Obfuscation with rules might fail due to wrong .NET version. (ex. assembly uses function from .NET 4.0, but compiled in 3.5) 
-        - Obfuscation might fail from different combinations of rules 
+    .EXAMPLE 
+    PS> Invoke-PrepareAssembly -jsonfile ./tools.json -gitclone 
+    Git clone all tools inside tools.json  
+
+    .EXAMPLE 
+    PS> Invoke-PrepareAssembly -jsonfile ./tools.json -compile 
+    Compile all tools inside tools.json  
+
+    .EXAMPLE 
+    PS> Invoke-PrepareAssembly -jsonfile ./tools.json -obfuscate 
+    Obfuscate all tools inside tools.json using confuserEx   
+
+    .EXAMPLE 
+    PS> Invoke-PrepareAssembly -jsonfile ./tools.json -encrypt -key "encryptionkey" 
+    Encrypt all tools inside tools.json using AES256  
+
+    .EXAMPLE 
+    PS> Invoke-PrepareAssembly -slnPath c:\tools\Rubeus\Rubeus.sln -outDir c:\Payloads -compile 
+    Compile specific project using default setting (Any CPU, dotnet 4.0, Exe)
+
+    .EXAMPLE 
+    PS> Invoke-PrepareAssembly -inFile C:\Payloads\Rubeus.exe -outDir C:\Confused -obfuscate 
+    Obfuscate specific file using default confuserEx settings 
+
 #>
+
+
+# My first powershell script! (that is more than 5 lines!) - choi 
+
+# You probably want to use an actual CI/CD pipeline instead of this scuffed script.
+
+# All credits goes to : 
+#     - https://github.com/Aetsu/OffensivePipeline. This is Pretty much a (scuffed) powershell port of OffensivePipeline 
+#     - https://github.com/FuzzySecurity/Sharp-Suite/blob/master/DiscerningFinch - For environmental keying and decrypting 
+#     - covertToolsmith, mdsec, @domchell and his mind-blowing presentation (galaxy brain)
+
+# Notes:
+#     - Obfuscation with rules might fail due to wrong .NET version. (ex. assembly uses function from .NET 4.0, but compiled in 3.5) 
+#     - Obfuscation might fail from different combinations of rules 
 
     Param(
         [CmdletBinding()]
@@ -130,7 +168,8 @@ Function Invoke-PrepareAssembly{
         }
     }
 
-    
+    # Initial check - See if required binaries are inside current PATH. If not, download and suggest. 
+    # Hardcoding URLs is a bad idea 
     Function initCheck(){
         $cmds = @('git.exe', 'nuget.exe', 'Confuser.CLI.exe', 'donut.exe')
 
@@ -247,7 +286,7 @@ Function Invoke-PrepareAssembly{
         return $returnConfuserConfig
     }
 
-    # TODO: Implement Arch and Dotnet version 
+    # Compile .NET assembly using msbuild. Specify output directory, arch (x86/64), outputType(exe,dll), dotnetVersion 
     Function compile ($slnPath, $outDir, $arch, $outputType, $dotnetVersion){
         Write-Host "[+] Compiling $slnPath ..."
 
@@ -259,7 +298,6 @@ Function Invoke-PrepareAssembly{
         Write-Host "[+] Nuget restoring packages, if there are any"
         nuget restore $slnPath 2>&1 | Out-Null 
 
-        # TODO: Implement /p:TargetFrameworkVersion and OutputType (Exe, Library)
         $msbuildTemplate = "{{SOLUTION_PATH}} /p:Platform=`'{{ARCH}}`' /p:OutputPath=`'{{OUTPUT_DIR}}`' /p:DebugSymbols=false /p:DebugType=None /p:OutputType={{OUTPUT_TYPE}} /p:TargetFrameworkVersion={{DOTNETVERSION}}"
         $msbuildOptions = $msbuildTemplate.
         replace("{{SOLUTION_PATH}}", $slnPath).
@@ -395,7 +433,7 @@ Function Invoke-PrepareAssembly{
         $encryptedBytes = $aesManaged.IV + $encryptedBytes
         
         [System.IO.File]::WriteAllBytes($outFilePath, $encryptedBytes)
-        Write-Host "[+] Encrypted assembly written: $outFilePath"
+        Write-Host "[+] Encrypted assembly written: $outFilePath" -ForegroundColor Green
 
         $shaManaged.Dispose()
         $aesManaged.Dispose()
@@ -626,14 +664,16 @@ Function Invoke-PrepareAssembly{
     if($encrypt){
 
         # Encrypt invidivual file  
-        if ($inFile -and $key){
+        if (-not $jsonFile -and ($inFile -and $key)){
             Write-Host "[+] AES256 Encrypting $inFile with $key ..."
             aes256Encrypt $inFile $key
         }
 
+        # TODO - Implement -toolName encryption with jsonFile? 
+
         # Encrypt tools within jsonFile  
         elseif ($jsonFile -and $key) {
-            $userAnswer = Read-Host "`n[+] Encrypt confused assemblies (confused)? Or compiled assemblies (compiled)?"
+            $userAnswer = Read-Host "`n[+] Encrypt [confused/compiled] assemblies ?"
 
             if($userAnswer.ToLower() -eq "confused"){
                 Write-Host "`n[+] Encrypting all .exe/.dll assemblies from $outDir\Confused ..."
@@ -641,22 +681,33 @@ Function Invoke-PrepareAssembly{
                 Start-Sleep -Seconds 5 
                 $confusedDir = Join-Path -Path $outDir -ChildPath "Confused"
                 $inFiles = (Get-ChildItem $confusedDir | Where-Object { ($_.Extension -eq ".dll") -or ($_.Extension -eq ".exe") }).Name
-                foreach ($inFile in $inFiles) {
-                    aes256Encrypt $inFile $key 
-                }
-            }
-
-            elseif ($userAnswer.ToLower() -eq "compiled"){
-                Write-Host "[+] Encrypting all .exe/.dll assmeblies from $outDir ..."
-                Write-Host "[+] Encrypting begins in 5 seconds"
-                Start-Sleep -Seconds 5 
-
-                $inFiles = (Get-ChildItem $outDir | Where-Object { ($_.Extension -eq ".dll") -or ($_.Extension -eq ".exe") }).Name
-                foreach ($inFile in $inFiles) {
-                    aes256Encrypt $inFile $key 
+                foreach ($tool in $jsonData.tools) {
+                    if($toolName.ToLower() -like ($tool.Name).ToLower()){
+                        foreach ($inFile in $inFiles) {
+                            $inFile = Join-Path -Path $confusedDir -ChildPath $inFile
+                            aes256Encrypt $inFile $key 
+                        }
+                    }
                 }
             }
         }
+
+        elseif ($userAnswer.ToLower() -eq "compiled"){
+            Write-Host "[+] Encrypting all .exe/.dll assmeblies from $outDir ..."
+            Write-Host "[+] Encrypting begins in 5 seconds"
+            Start-Sleep -Seconds 5 
+
+            $inFiles = (Get-ChildItem $outDir | Where-Object { ($_.Extension -eq ".dll") -or ($_.Extension -eq ".exe") }).Name
+            foreach ($tool in $jsonData.tools) {
+                if($toolName.ToLower() -like ($tool.Name).ToLower()){
+                    foreach ($inFile in $inFiles) {
+                        $inFile = Join-Path -Path $outDir -ChildPath $inFile
+                        aes256Encrypt $inFile $key 
+                    }
+                }
+            }
+        }
+        
 
         else{
             Write-Host "[-] Wrong parameter combination. Either give me 'inFile' or 'jsonFile' with 'key'. " -ForegroundColor Red
