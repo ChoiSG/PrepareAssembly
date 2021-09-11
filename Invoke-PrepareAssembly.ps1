@@ -3,6 +3,7 @@ Function Invoke-PrepareAssembly{
     .DESCRIPTION
     Git clone, compile, obfuscate, and encrypt .NET assemblies. 
     Requires git.exe, msbuild.exe, confuser.cli.exe to be in PATH. 
+    RECOMMENDED to modify tools.json file - especially the "outDir".
 
     .EXAMPLE 
     PS> Invoke-PrepareAssembly -jsonfile ./tools.json -gitclone -compile -obfuscate -encrypt -key "encryptionkey"
@@ -733,6 +734,8 @@ Function Invoke-PrepareAssembly{
         }
     }
 
+    # tools.json file not supported as of now 
+    # TODO: Implement tools.json
     if ($donut){
         if($inFile){
             Write-Host "[+] Donutting $inFile with default arguments" -ForegroundColor Green
@@ -745,7 +748,7 @@ Function Invoke-PrepareAssembly{
             donut.exe $inFile $donutArgs 
         }
         else{
-            Write-Host "[-] Wrong parameter combination. Either give me 'inFile' or 'jsonFile' with 'key'. " -ForegroundColor Red
+            Write-Host "[-] Wrong parameter combination. Either give me 'inFile' or 'donutArgs' " -ForegroundColor Red
             return 
         }
     }
