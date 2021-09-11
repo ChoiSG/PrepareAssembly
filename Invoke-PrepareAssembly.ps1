@@ -395,7 +395,7 @@ Function Invoke-PrepareAssembly{
             # If second confuser fails, I have no idea. Exit. 
             if ($LastExitCode -ne 0){
                 Write-Host "[-] Confuser cli obfuscation failed" -ForegroundColor Red 
-                Write-Host "[-] Suggest manually obfuscaating using ConfuserEx GUI" -ForegroundColor Red
+                Write-Host "[-] Suggest manually obfuscating using ConfuserEx GUI" -ForegroundColor Red
                 return  
             }
             else{
