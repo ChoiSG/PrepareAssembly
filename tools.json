@@ -72,6 +72,14 @@
             "arch": "Any CPU",
             "dotnetVersion": "v3.5",
             "outputType": "Exe"
+        },
+        {
+            "name": "StandIn",
+            "gitLink": "https://github.com/FuzzySecurity/StandIn",
+            "slnPath": "StandIn\\StandIn\\StandIn.sln",
+            "arch": "Any CPU",
+            "dotnetVersion": "v4.5",
+            "outputType": "Exe"
         }
 
 

@@ -20,11 +20,11 @@ namespace decryptTest
             aesManaged.BlockSize = 128; 
             aesManaged.KeySize = 256;
 
-            // Decryption key 
+            // Decryption key & file - CHANGEME 
             string key = "testo@testo.local";
             aesManaged.Key = shaManaged.ComputeHash(Encoding.UTF8.GetBytes(key));
 
-            string filePath = @"C:\dev\testo\Confused\Seatbelt.exe.aes";
+            string filePath = @"C:\dev\test3\Confused\Seatbelt.exe.aes";
             var cipherBytes = File.ReadAllBytes(filePath);
 
             // Decrypting 
@@ -42,8 +42,8 @@ namespace decryptTest
             //File.WriteAllBytes(outPath, decryptedBytes);
 
             Assembly testAssembly = Assembly.Load(decryptedBytes);
-            object[] parameters = new object[] { new string[] { "" } };
-            //Object[] parameters = new object[] { new string[] { "-group=all" } };
+            //object[] parameters = new object[] { new string[] { "" } };
+            object[] parameters = new object[] { new string[] { "-group=user" } };
             testAssembly.EntryPoint.Invoke(null, parameters);
 
             Console.WriteLine("\n" + "Press Enter to shut me down!");
