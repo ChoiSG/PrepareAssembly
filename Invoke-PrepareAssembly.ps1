@@ -58,6 +58,10 @@ Function Invoke-PrepareAssembly{
 #     - Obfuscation with rules might fail due to wrong .NET version. (ex. assembly uses function from .NET 4.0, but compiled in 3.5) 
 #     - Obfuscation might fail from different combinations of rules 
 
+# Change obfuscate/encrypt/donut "contain" or "like" instead of 1:1 match with the toolname 
+#   - This is because the tool names are now <tool>_<random_name>
+# 
+
     Param(
         [CmdletBinding()]
 
@@ -84,7 +88,7 @@ Function Invoke-PrepareAssembly{
         [Parameter(Mandatory=$false, HelpMessage='Target Architecture. x86, x64, or "Any CPU". Default is Any CPU')]
         [string] $arch = "Any CPU",
 
-        [Parameter(Mandatory=$false, HelpMessage='Output type of the assembly. exe or dll. Default is exe.')]
+        [Parameter(Mandatory=$false, HelpMessage='Output type of the assembly. Exe or Library. Default is Exe.')]
         [string] $outputType = "exe",
 
         [Parameter(Mandatory=$false, HelpMessage='Dotnet version. Default is 4.0')]
@@ -94,7 +98,7 @@ Function Invoke-PrepareAssembly{
         [string] $confuserConfig = 
 @"
 <project outputDir="{{OUTPUT_DIR}}" baseDir="{{BASE_DIR}}" xmlns="http://www.google.com">
-    <packer id="compressor" />  
+    <!-- <packer id="compressor" /> --> <!-- this breaks DLL files "No executable module". Use if you are only obfuscating exe files --> 
     <rule pattern="true" preset="{{LEVEL}}" inherit="false">
         <protection id="anti ildasm" />
         <protection id="anti debug" action="remove" /> <!-- this breaks Assembly.Load. Maybe just use donut?  -->
@@ -285,10 +289,11 @@ Function Invoke-PrepareAssembly{
 
                         if( $fullPath.ToLower().Contains($slnDir.ToLower()) ){
                             $references.Add($fullPath)
-                            # <module path="{{MODULE_PATH}}" />
                             $addModule = "    <module path=`"$fullPath`" />"
                             $confuserConfig = $confuserConfig + "`n" + $addModule
                             Write-Host "[+] Copying Reference: $fullPath to outdir: $outDir"
+                            # Not copying refernce dll because the full path goes into confuserEx config file now
+                            # Apparently the dll needs to be in the same path 
                             Copy-Item -Path $fullpath -Destination $outDir -Force 
                         }
 
@@ -305,7 +310,36 @@ Function Invoke-PrepareAssembly{
         return $returnConfuserConfig
     }
 
+    Function nullAssemblyInfo($slnPath){
+        $assemblyInfoPath = (Get-ChildItem -Path (Get-Item $slnPath).Directory.FullName -Filter "AssemblyInfo.cs" -Recurse).FullName
+    
+        (Get-Content $assemblyInfoPath) | foreach-Object{
+            if($_ -Match "Title"){ '[assembly: AssemblyTitle("{0}")]' -f [String]::Empty } 
+            elseif($_ -Match "Description"){ '[assembly: AssemblyDescription("{0}")]' -f [String]::Empty }
+            elseif($_ -Match "Product"){ '[assembly: AssemblyProduct("{0}")]' -f [String]::Empty }
+            elseif($_ -Match "Copyright"){ '[assembly: AssemblyCopyright("{0}")]' -f [String]::Empty }
+            elseif($_ -Match "assembly: Guid"){ '[assembly: Guid("{0}")]' -f (New-Guid).Guid }
+            else{ $_ }
+        } | Set-content $assemblyInfoPath
+    }
+
+    # Change AssemblyName in csproj, Nullout AssemblyInfo 
+    # Returns assembly name of random string of 8 characters 
+    Function changeAssemblyName($slnPath) {
+        # Change AssemblyName 
+        $csprojFile = (Get-ChildItem -Path (Get-Item $slnPath).Directory.FullName "*.csproj" -Recurse).FullName
+        $xmlObj = [xml](Get-Content -Path $csprojFile)
+        $newAssemblyName = -join ((48..57) + (97..122) | Get-Random -Count 8 | % {[char]$_})
+        $xmlObj.Project.PropertyGroup[0].AssemblyName = $newAssemblyName
+        $xmlObj.Save($csprojFile)
+
+        return $newAssemblyName
+    }
+
     # Compile .NET assembly using msbuild. Specify output directory, arch (x86/64), outputType(exe,dll), dotnetVersion 
+    # Delets AssemblyInfo.cs and change GUID from the slnPath 
+    # Returns slnPath (parse toolName) + randomName returned from changeAssembly Name
+    # TODO: Documentation and 1.2.3. .. 
     Function compile ($slnPath, $outDir, $arch, $outputType, $dotnetVersion){
         Write-Host "[+] Compiling $slnPath ..."
 
@@ -327,12 +361,21 @@ Function Invoke-PrepareAssembly{
 
         Write-Host "[*] Build options: $msbuildOptions"
 
-        # Actually building 
         Write-Host "[+] Building $slnPath ..." 
-        $msbuild = (Find-MsBuild).Path[0]
+        $msbuild = (Find-MsBuild).Path[0] 
+
+        # Change assemblyName and remove assemblyInfo metadata 
+        $randomAssemblyName = changeAssemblyName($slnPath)
+        nullAssemblyInfo($slnPath)
 
         #$output = Invoke-Expression "& `"$msbuild`" $msbuildOptions"
         $output = Invoke-Expression "& `"$msbuild`" $msbuildOptions" | Out-Null
+
+        # Go through outDir, find file with <randomAssemblyName> that ends with .exe or .dll. Parse Toolname from slnPath, and change that file's name to <tool>_<name>
+        $assemblyFile = (Get-Childitem $outDir | Where-Object { ($_ -match $randomAssemblyName) -and ( ($_.Extension -eq ".dll") -or ($_.Extension -eq ".exe") )  }).FullName
+        $toolName = (Get-Item $slnPath).Directory.Name
+        $finalAssemblyName = ($toolName + "_" + $randomAssemblyName + "." + $assemblyFile.split('.')[1])
+        Rename-Item $assemblyFile -NewName $(Join-Path -Path $outDir -ChildPath $finalAssemblyName)        
 
         if ($LastExitCode -ne 0)
         {
@@ -341,7 +384,8 @@ Function Invoke-PrepareAssembly{
             return
         }
         
-        Write-Host "[+] Compiling successful: $([System.IO.Path]::GetFileNameWithoutExtension($slnPath))`n`n" -ForegroundColor Green
+        Write-Host "[+] Compiling successful: $finalAssemblyName`n`n" -ForegroundColor Green
+        #Write-Host "[+] Compiling successful: $([System.IO.Path]::GetFileNameWithoutExtension($slnPath))`n`n" -ForegroundColor Green
     }
 
     <# Create "Confused" directory and then  #>
@@ -392,7 +436,10 @@ Function Invoke-PrepareAssembly{
 
         # Updating confuser config with references, if they exist. 
         # powershell weird with returning result of all commands and then the function return value wtf 
+        # Debugging... not sure what to do 
         $finalConfuserConfig = copyReferences $slnPath $outDir $updatedConfuserConfig | Select-Object -Last 1
+
+        #$finalConfuserConfig = $updatedConfuserConfig
 
         $confuserConfigFilePath = $confusedDir + "\" + $(Split-Path $inFile -leaf) + ".crproj"
         $finalConfuserConfig | Out-File -FilePath $confuserConfigFilePath
@@ -413,17 +460,16 @@ Function Invoke-PrepareAssembly{
 
             # If second confuser fails, I have no idea. Exit. 
             if ($LastExitCode -ne 0){
-                Write-Host "[-] Confuser cli obfuscation failed" -ForegroundColor Red 
-                Write-Host "[-] Suggest manually obfuscating using ConfuserEx GUI" -ForegroundColor Red
+                Write-Host "[-] Obfuscation failed. Suggest manually obfuscating using ConfuserEx GUI`n" -ForegroundColor Red
                 return  
             }
             else{
                 Write-Host "[+] 2nd try succeeded" -ForegroundColor Green
+                Write-Host "[+] Obfuscation successful: $confusedDir\$(Split-Path -Path $inFile -Leaf)`n" -ForegroundColor Green 
             }
         }
         else{
-            Write-Host "[+] Obfuscation successful: $confusedDir\$(Split-Path -Path $inFile -Leaf)" -ForegroundColor Green 
-            Write-Host ""
+            Write-Host "[+] Obfuscation successful: $confusedDir\$(Split-Path -Path $inFile -Leaf)`n" -ForegroundColor Green 
         }
     }
 
@@ -627,8 +673,8 @@ Function Invoke-PrepareAssembly{
     <# Obufscate #>
     if($obfuscate){
         try{
-            # get all dll or exe files from outdir 
-            $inFiles = (Get-ChildItem $outDir | Where-Object { ($_.Extension -eq ".dll") -or ($_.Extension -eq ".exe") }).Name
+            # get all dll or exe filenames from outdir, in descending order of time 
+            $inFiles = (Get-ChildItem $outDir | Where-Object { ($_.Extension -eq ".dll") -or ($_.Extension -eq ".exe") } | Sort-Object CreationTime -Descending ).Name
         }
         catch{
             Write-Host "[-] Cannot find any PE files in $outDir . Exiting." -ForegroundColor Red
@@ -646,6 +692,9 @@ Function Invoke-PrepareAssembly{
                         $inFile = Join-Path -Path $outDir -ChildPath $inFile
 
                         obfuscate $inFile $outDir $finalToolslnPath $confuserConfig $level 
+
+                        # Found the most recent one, and obfuscated. Break out and finish. 
+                        break
                     }
                 }
             }
@@ -654,23 +703,29 @@ Function Invoke-PrepareAssembly{
         # Obfuscate all tools inside jsonFile 
         elseif($jsonFile){
             #Write-Host "[+] Default confuserConfig = $confuserConfig"
-            foreach ($inFile in $inFiles) {
-                foreach ($toolName in ($jsonData.tools.Name).ToLower()) {
+            foreach ($toolName in ($jsonData.tools.Name).ToLower()) {
+                foreach ($inFile in $inFiles) {
                     if ($inFile.ToLower().Contains($toolName.ToLower())) {
                         $inFile = Join-Path -Path $outDir -ChildPath $inFile
-                        $toolslnPath = $jsonData.tools | where{$_.Name -eq $toolName} | Select-Object -ExpandProperty slnPath
+                        $toolslnPath = $jsonData.tools | Where-Object {$_.Name -eq $toolName} | Select-Object -ExpandProperty slnPath
                         $finalToolslnPath = Join-Path -Path $outDir -ChildPath $toolslnPath
 
                         Write-Host "[+] Obfuscating $inFile" 
-                        obfuscate $inFile $outDir $finalToolslnPath $confuserConfig $level 
+                        obfuscate $inFile $outDir $finalToolslnPath $confuserConfig $level   
+
+                        # If the most (inFiles is sorted descending) tool is obfuscated, continue to next tool 
+                        break     
                     }
+
+                    # If the most (inFiles is sorted descending) tool is obfuscated, continue to next tool 
+                    continue
                 }
             }
         }
 
         # Obfuscate specific tool with filepath 
-        elseif($inFile -and $outDir){
-            obfuscate $inFile $outDir $confuserConfig $level 
+        elseif($inFile -and $outDir -and $slnPath){
+            obfuscate $inFile $outDir $slnPath $confuserConfig $level 
         }
 
         else{
@@ -705,6 +760,9 @@ Function Invoke-PrepareAssembly{
                         foreach ($inFile in $inFiles) {
                             $inFile = Join-Path -Path $confusedDir -ChildPath $inFile
                             aes256Encrypt $inFile $key 
+
+                            # Move on to the next tools in tools.json file 
+                            continue 
                         }
                     }
                 }
