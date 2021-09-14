@@ -746,7 +746,7 @@ Function Invoke-PrepareAssembly{
 
             Write-Host "`n[+] Encrypting .exe/.dll assemblies from confused/compiled directory ..."
             Write-Host "[+] Encrypting begins in 5 seconds"
-            Start-Sleep -Seconds 2
+            Start-Sleep -Seconds 5
 
             $confusedDir = Join-Path -Path $outDir -ChildPath "Confused"
             if ($userAnswer.ToLower() -eq "confused"){
@@ -762,15 +762,11 @@ Function Invoke-PrepareAssembly{
                 return
             }
 
-            Write-Host "[+] $inFiles"
-
-            # If specific tool 
+            # Encrypting specific tool with -toolName 
             if($toolName){
                 foreach ($tool in $jsonData.tools.name) {
                     foreach ($inFile in $inFiles) {
-                        #Write-Host "[+] $tool, $inFile"
                         if($inFile.ToLower().Contains($toolName.ToLower())) {
-                            #Write-Host "[+] I got called!"
                             $inFile = Join-Path -Path $encryptPath -ChildPath $inFile
                             aes256Encrypt $inFile $key
                             break
@@ -780,13 +776,11 @@ Function Invoke-PrepareAssembly{
                 }
             }
 
-            # If encrypting all confused files 
+            # Encrypting all tools inside json file
             else{
                 foreach ($tool in $jsonData.tools.name) {
                     foreach ($inFile in $inFiles) {
-                        #Write-Host "[+] $tool, $inFile"
                         if($inFile.ToLower().Contains($tool.ToLower())) {
-                            #Write-Host "[+] I got called!"
                             $inFile = Join-Path -Path $encryptPath -ChildPath $inFile
                             aes256Encrypt $inFile $key
                             break
