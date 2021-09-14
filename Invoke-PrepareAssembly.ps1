@@ -58,9 +58,7 @@ Function Invoke-PrepareAssembly{
 #     - Obfuscation with rules might fail due to wrong .NET version. (ex. assembly uses function from .NET 4.0, but compiled in 3.5) 
 #     - Obfuscation might fail from different combinations of rules 
 
-# Change obfuscate/encrypt/donut "contain" or "like" instead of 1:1 match with the toolname 
-#   - This is because the tool names are now <tool>_<random_name>
-# 
+# Are you ready for some spaghetti? Let's go!
 
     Param(
         [CmdletBinding()]
@@ -254,13 +252,10 @@ Function Invoke-PrepareAssembly{
         return 0 
     }
 
-    <# https://stackoverflow.com/questions/5313719/how-to-find-reference-path-via-csproject-file #>
+    <# Modified from https://stackoverflow.com/questions/5313719/how-to-find-reference-path-via-csproject-file #>
     Function copyReferences($slnPath, $outDir, $confuserConfig){
         $slnDir = Split-Path -Path $slnPath -Parent
-
         $projectFiles = Get-ChildItem $slnDir *.csproj -Recurse 
-
-        $references = [System.Collections.ArrayList]@()
 
         # Go through .csproj and look for "hintPath". If such references exist, copy those dll files to outDir.
         foreach ($projectFile in $projectFiles) {
@@ -288,7 +283,6 @@ Function Invoke-PrepareAssembly{
                         }
 
                         if( $fullPath.ToLower().Contains($slnDir.ToLower()) ){
-                            $references.Add($fullPath)
                             $addModule = "    <module path=`"$fullPath`" />"
                             $confuserConfig = $confuserConfig + "`n" + $addModule
                             Write-Host "[+] Copying Reference: $fullPath to outdir: $outDir"
@@ -310,6 +304,7 @@ Function Invoke-PrepareAssembly{
         return $returnConfuserConfig
     }
 
+    # Nullify AssemblyInfo.cs and change GUID to random GUID. 
     Function nullAssemblyInfo($slnPath){
         $assemblyInfoPath = (Get-ChildItem -Path (Get-Item $slnPath).Directory.FullName -Filter "AssemblyInfo.cs" -Recurse).FullName
     
@@ -348,9 +343,11 @@ Function Invoke-PrepareAssembly{
             return 
         }
 
+        # 1. Restore nuget 
         Write-Host "[+] Nuget restoring packages, if there are any"
         nuget restore $slnPath 2>&1 | Out-Null 
 
+        # 2. Configure confuserEx configuration file 
         $msbuildTemplate = "{{SOLUTION_PATH}} /p:Platform=`'{{ARCH}}`' /p:OutputPath=`'{{OUTPUT_DIR}}`' /p:DebugSymbols=false /p:DebugType=None /p:OutputType={{OUTPUT_TYPE}} /p:TargetFrameworkVersion={{DOTNETVERSION}}"
         $msbuildOptions = $msbuildTemplate.
         replace("{{SOLUTION_PATH}}", $slnPath).
@@ -364,10 +361,13 @@ Function Invoke-PrepareAssembly{
         Write-Host "[+] Building $slnPath ..." 
         $msbuild = (Find-MsBuild).Path[0] 
 
-        # Change assemblyName and remove assemblyInfo metadata 
+        # 3. Change assemblyName and remove assemblyInfo metadata 
         $randomAssemblyName = changeAssemblyName($slnPath)
+        
+        # 4. Nullify AssemblyInfo.cs and generate fake GIUD 
         nullAssemblyInfo($slnPath)
 
+        # 5. Actually compile the assembly using msbuild 
         #$output = Invoke-Expression "& `"$msbuild`" $msbuildOptions"
         $output = Invoke-Expression "& `"$msbuild`" $msbuildOptions" | Out-Null
 
@@ -385,7 +385,6 @@ Function Invoke-PrepareAssembly{
         }
         
         Write-Host "[+] Compiling successful: $finalAssemblyName`n`n" -ForegroundColor Green
-        #Write-Host "[+] Compiling successful: $([System.IO.Path]::GetFileNameWithoutExtension($slnPath))`n`n" -ForegroundColor Green
     }
 
     <# Create "Confused" directory and then  #>
@@ -434,12 +433,8 @@ Function Invoke-PrepareAssembly{
             Replace("{{LEVEL}}", $level)
         }
 
-        # Updating confuser config with references, if they exist. 
-        # powershell weird with returning result of all commands and then the function return value wtf 
-        # Debugging... not sure what to do 
+        # Updating confuserEx config with references, if they exist. 
         $finalConfuserConfig = copyReferences $slnPath $outDir $updatedConfuserConfig | Select-Object -Last 1
-
-        #$finalConfuserConfig = $updatedConfuserConfig
 
         $confuserConfigFilePath = $confusedDir + "\" + $(Split-Path $inFile -leaf) + ".crproj"
         $finalConfuserConfig | Out-File -FilePath $confuserConfigFilePath
@@ -448,7 +443,7 @@ Function Invoke-PrepareAssembly{
         # debug
         #Confuser.CLI.exe -n $confuserConfigFilePath 
 
-        # If first confuser fails, it might be because of copied reference. Retry without them.
+        # If first confuser fails, it might be because of adding module Paths from copyReferences. Retry with a simple confuserEx config.
         if ($LastExitCode -ne 0)
         {
             $updatedConfuserConfig = $updatedConfuserConfig + "`n</project>"
@@ -734,7 +729,7 @@ Function Invoke-PrepareAssembly{
         }
     }
 
-    <# Encrypt with AES256. #>
+    <# Encrypt with AES256 #>
     if($encrypt){
 
         # Encrypt invidivual file  
@@ -749,46 +744,56 @@ Function Invoke-PrepareAssembly{
         elseif ($jsonFile -and $key) {
             $userAnswer = Read-Host "`n[+] Encrypt [confused/compiled] assemblies ?"
 
-            if($userAnswer.ToLower() -eq "confused"){
-                Write-Host "`n[+] Encrypting all .exe/.dll assemblies from $outDir\Confused ..."
-                Write-Host "[+] Encrypting begins in 5 seconds"
-                Start-Sleep -Seconds 5 
-                $confusedDir = Join-Path -Path $outDir -ChildPath "Confused"
-                $inFiles = (Get-ChildItem $confusedDir | Where-Object { ($_.Extension -eq ".dll") -or ($_.Extension -eq ".exe") }).Name
-                foreach ($tool in $jsonData.tools) {
-                    if($toolName.ToLower() -like ($tool.Name).ToLower()){
-                        foreach ($inFile in $inFiles) {
-                            $inFile = Join-Path -Path $confusedDir -ChildPath $inFile
-                            aes256Encrypt $inFile $key 
+            Write-Host "`n[+] Encrypting .exe/.dll assemblies from confused/compiled directory ..."
+            Write-Host "[+] Encrypting begins in 5 seconds"
+            Start-Sleep -Seconds 2
 
-                            # Move on to the next tools in tools.json file 
-                            continue 
+            $confusedDir = Join-Path -Path $outDir -ChildPath "Confused"
+            if ($userAnswer.ToLower() -eq "confused"){
+                $inFiles = (Get-ChildItem $confusedDir | Where-Object { ($_.Extension -eq ".dll") -or ($_.Extension -eq ".exe") }).Name
+                $encryptPath = $confusedDir
+            }
+            elseif($userAnswer.ToLower() -eq "compiled"){
+                $inFiles = (Get-ChildItem $outDir | Where-Object { ($_.Extension -eq ".dll") -or ($_.Extension -eq ".exe") }).Name
+                $encryptPath = $outDir
+            }
+            else{
+                Write-Host "[-] Please choose confused or compiled" -ForegroundColor Red
+                return
+            }
+
+            Write-Host "[+] $inFiles"
+
+            # If specific tool 
+            if($toolName){
+                foreach ($tool in $jsonData.tools.name) {
+                    foreach ($inFile in $inFiles) {
+                        #Write-Host "[+] $tool, $inFile"
+                        if($inFile.ToLower().Contains($toolName.ToLower())) {
+                            #Write-Host "[+] I got called!"
+                            $inFile = Join-Path -Path $encryptPath -ChildPath $inFile
+                            aes256Encrypt $inFile $key
+                            break
+                        }
+                    }
+                    break
+                }
+            }
+
+            # If encrypting all confused files 
+            else{
+                foreach ($tool in $jsonData.tools.name) {
+                    foreach ($inFile in $inFiles) {
+                        #Write-Host "[+] $tool, $inFile"
+                        if($inFile.ToLower().Contains($tool.ToLower())) {
+                            #Write-Host "[+] I got called!"
+                            $inFile = Join-Path -Path $encryptPath -ChildPath $inFile
+                            aes256Encrypt $inFile $key
+                            break
                         }
                     }
                 }
             }
-        }
-
-        elseif ($userAnswer.ToLower() -eq "compiled"){
-            Write-Host "[+] Encrypting all .exe/.dll assmeblies from $outDir ..."
-            Write-Host "[+] Encrypting begins in 5 seconds"
-            Start-Sleep -Seconds 5 
-
-            $inFiles = (Get-ChildItem $outDir | Where-Object { ($_.Extension -eq ".dll") -or ($_.Extension -eq ".exe") }).Name
-            foreach ($tool in $jsonData.tools) {
-                if($toolName.ToLower() -like ($tool.Name).ToLower()){
-                    foreach ($inFile in $inFiles) {
-                        $inFile = Join-Path -Path $outDir -ChildPath $inFile
-                        aes256Encrypt $inFile $key 
-                    }
-                }
-            }
-        }
-        
-
-        else{
-            Write-Host "[-] Wrong parameter combination. Either give me 'inFile' or 'jsonFile' with 'key'. " -ForegroundColor Red
-            return 
         }
     }
 
