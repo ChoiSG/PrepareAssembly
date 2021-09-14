@@ -19,9 +19,7 @@ namespace decryptTest
             aesManaged.BlockSize = 128;
             aesManaged.KeySize = 256;
 
-            // Decryption key & file - CHANGEME 
             aesManaged.Key = shaManaged.ComputeHash(Encoding.UTF8.GetBytes(key));
-
             var cipherBytes = File.ReadAllBytes(filePath);
 
             // Decrypting 
