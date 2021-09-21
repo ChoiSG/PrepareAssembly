@@ -181,7 +181,7 @@ Function Invoke-PrepareAssembly{
 
         $cmds = @('git.exe', 'nuget.exe', 'Confuser.CLI.exe')
 
-        $downloadDir = New-Item -Path "utilTools" -ItemType Directory -Force | Out-Null
+        $downloadDir = New-Item -Path "utilTools" -ItemType Directory -Force
         Write-Host "[+] Creating Downloads directory $downloadDir" -ForegroundColor Green
 
         # Check for msbuild.exe first 
