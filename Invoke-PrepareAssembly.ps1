@@ -183,6 +183,22 @@ Function Invoke-PrepareAssembly{
         $downloadDir = New-Item -Path "utilTools" -ItemType Directory -Force | Out-Null
         Write-Host "[+] Creating Downloads directory $downloadDir" -ForegroundColor Green
 
+        # Check for msbuild.exe first 
+        $msbuild = (Find-MsBuild).Path[0]
+        if(-not $msBuild){
+            Write-Host "[-] Msbuild does not exist" -ForegroundColor Red 
+            return 1 
+        }
+
+        Write-Host "[+] msBuild.exe location: $msBuild" -ForegroundColor Green 
+
+        if($initCheckResult -eq 1){
+            Write-Host "[*] Your Path: $($Env:Path)" 
+            Write-Host "[*] Install or move necessary binaries and their DLLs to your PATH.`n[*] Or just add those paths into your PATH." -ForegroundColor Green
+            return 1
+        }
+
+        # Check git, nuget, confuser. Not having donut.exe is fine tho. 
         foreach($cmd in $cmds){
             if (-not(checkCommand($cmd))){
                 # If one command doesn't exist, function returns "1" - fail 
@@ -217,6 +233,7 @@ Function Invoke-PrepareAssembly{
                         Expand-Archive -Path $donutPath -DestinationPath $donutPath.split('.')[0] -Force 
                         
                         Write-Host "[*] Downloaded donut and unzipped $donutPath" 
+                        return 0
                     }
                 }           
             }
@@ -229,20 +246,6 @@ Function Invoke-PrepareAssembly{
             }
 
             Write-Host ""
-        }
-
-        $msbuild = (Find-MsBuild).Path[0]
-        if(-not $msBuild){
-            Write-Host "[-] Msbuild does not exist" -ForegroundColor Red 
-            return 1 
-        }
-
-        Write-Host "[+] msBuild.exe location: $msBuild" -ForegroundColor Green 
-
-        if($initCheckResult -eq 1){
-            Write-Host "[*] Your Path: $($Env:Path)" 
-            Write-Host "[*] Install or move necessary binaries and their DLLs to your PATH.`n[*] Or just add those paths into your PATH." -ForegroundColor Green
-            return 1
         }
     
         # Check msbuild.exe executable. Grab the first one if multiple found. 
