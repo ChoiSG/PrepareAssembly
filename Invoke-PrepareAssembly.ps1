@@ -212,8 +212,8 @@ Function Invoke-PrepareAssembly{
                       }
                     
                     "confuser.cli.exe" {
-                        $confuserPath = Join-Path -Path $downloadDir -ChildPath "confuser.v1.4.1.zip"
-                        (New-Object System.Net.WebClient).DownloadFile("https://github.com/mkaring/ConfuserEx/releases/download/v1.4.1/ConfuserEx-CLI.zip", $confuserPath)
+                        $confuserPath = Join-Path -Path $downloadDir -ChildPath "confuser.zip"
+                        (New-Object System.Net.WebClient).DownloadFile("https://github.com/mkaring/ConfuserEx/releases/download/v1.5.0/ConfuserEx-CLI.zip", $confuserPath)
                         Expand-Archive -Path $confuserPath -DestinationPath $confuserPath.split('.')[0]  -Force 
     
                         Write-Host "[*] Downloaded $cmd and unzipped in $confuserPath ..." 
