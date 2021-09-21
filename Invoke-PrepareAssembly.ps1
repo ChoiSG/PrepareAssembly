@@ -594,9 +594,6 @@ Function Invoke-PrepareAssembly{
             New-Item -Path $jsonData.outDir -ItemType "Directory" | Out-Null
         }
     }
-    
-    <# If no jsonFile and (no inFile, no slnPath, no OutDir), then use the default jsonFile #>
-    # TODO: Implement. 
 
     <# Git clone #>
     if($gitclone){
@@ -737,8 +734,6 @@ Function Invoke-PrepareAssembly{
             Write-Host "[+] AES256 Encrypting $inFile with $key ..."
             aes256Encrypt $inFile $key
         }
-
-        # TODO - Implement -toolName encryption with jsonFile? 
 
         # Encrypt tools within jsonFile  
         elseif ($jsonFile -and $key) {
