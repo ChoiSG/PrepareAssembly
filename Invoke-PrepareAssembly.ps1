@@ -219,7 +219,7 @@ Function Invoke-PrepareAssembly{
                         Write-Host "[*] Downloaded $cmd and unzipped in $confuserPath ..." 
                     }
                     "git.exe" {
-                        Write-Host "[*] Download git from here: https://github.com/git-for-windows/git/releases/"
+                        Write-Host "[*] Download & install git from here: https://github.com/git-for-windows/git/releases/"
                     }
 
                     "donut.exe" {
