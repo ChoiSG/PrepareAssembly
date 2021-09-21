@@ -145,14 +145,15 @@ Function Invoke-PrepareAssembly{
 # 
 
     # https://github.com/atmchile/powershell/blob/master/find-msbuild.ps1
+    # Only return 1 instance of msbuild foudn through resolve-path 
     function Find-MsBuild()
     {
         # 2017, 2019
-        $msbuild = Resolve-Path "${env:ProgramFiles(x86)}\Microsoft Visual Studio\*\*\MSBuild\*\bin\msbuild.exe" -EA 0
+        $msbuild = (Resolve-Path "${env:ProgramFiles(x86)}\Microsoft Visual Studio\*\*\MSBuild\*\bin\msbuild.exe" -EA 0)[0]
         If ((Test-Path $msbuild)) { return $msbuild } 
 
         # 2013 (12.0), 2015 (14.0)
-        $msbuild = Resolve-Path "${Env:ProgramFiles(x86)}\MSBuild\*\Bin\MSBuild.exe" -EA 0
+        $msbuild = (Resolve-Path "${Env:ProgramFiles(x86)}\MSBuild\*\Bin\MSBuild.exe" -EA 0)[0]
         If ((Test-Path $msbuild)) { return $msbuild } 
 
         # 4.0
@@ -184,7 +185,7 @@ Function Invoke-PrepareAssembly{
         Write-Host "[+] Creating Downloads directory $downloadDir" -ForegroundColor Green
 
         # Check for msbuild.exe first 
-        $msbuild = (Find-MsBuild).Path[0]
+        $msbuild = (Find-MsBuild).Path
         if(-not $msBuild){
             Write-Host "[-] Msbuild does not exist" -ForegroundColor Red 
             return 1 
@@ -361,7 +362,7 @@ Function Invoke-PrepareAssembly{
         Write-Host "[*] Build options: $msbuildOptions"
 
         Write-Host "[+] Building $slnPath ..." 
-        $msbuild = (Find-MsBuild).Path[0] 
+        $msbuild = (Find-MsBuild).Path
 
         # 3. Change assemblyName and remove assemblyInfo metadata 
         $randomAssemblyName = changeAssemblyName($slnPath)
