@@ -148,6 +148,11 @@ Function Invoke-PrepareAssembly{
     # Only return 1 instance of msbuild foudn through resolve-path 
     function Find-MsBuild()
     {
+        # TODO: Use this amd64 for x64, and use other x86 for x86. 
+        # amd64
+        $msbuild = (Resolve-Path "${env:ProgramFiles(x86)}\Microsoft Visual Studio\*\*\MSBuild\*\bin\*\msbuild.exe" -EA 0)[0]
+        If ((Test-Path $msbuild)) { return $msbuild } 
+
         # 2017, 2019
         $msbuild = (Resolve-Path "${env:ProgramFiles(x86)}\Microsoft Visual Studio\*\*\MSBuild\*\bin\msbuild.exe" -EA 0)[0]
         If ((Test-Path $msbuild)) { return $msbuild } 
@@ -351,7 +356,7 @@ Function Invoke-PrepareAssembly{
         nuget restore $slnPath 2>&1 | Out-Null 
 
         # 2. Configure confuserEx configuration file 
-        $msbuildTemplate = "{{SOLUTION_PATH}} /p:Platform=`'{{ARCH}}`' /p:OutputPath=`'{{OUTPUT_DIR}}`' /p:DebugSymbols=false /p:DebugType=None /p:OutputType={{OUTPUT_TYPE}} /p:TargetFrameworkVersion={{DOTNETVERSION}}"
+        $msbuildTemplate = "{{SOLUTION_PATH}} /p:Platform=`"{{ARCH}}`" /p:OutputPath=`"{{OUTPUT_DIR}}`" /p:DebugSymbols=false /p:DebugType=None /p:OutputType={{OUTPUT_TYPE}} /p:TargetFrameworkVersion={{DOTNETVERSION}}"
         $msbuildOptions = $msbuildTemplate.
         replace("{{SOLUTION_PATH}}", $slnPath).
         replace("{{ARCH}}", $arch).
@@ -372,6 +377,7 @@ Function Invoke-PrepareAssembly{
 
         # 5. Actually compile the assembly using msbuild 
         #$output = Invoke-Expression "& `"$msbuild`" $msbuildOptions"
+        Write-Host "[+] msbuild = $msbuild"
         $output = Invoke-Expression "& `"$msbuild`" $msbuildOptions" | Out-Null
 
         # Go through outDir, find file with <randomAssemblyName> that ends with .exe or .dll. Parse Toolname from slnPath, and change that file's name to <tool>_<name>
