@@ -96,7 +96,7 @@ Function Invoke-PrepareAssembly{
         [string] $confuserConfig = 
 @"
 <project outputDir="{{OUTPUT_DIR}}" baseDir="{{BASE_DIR}}" xmlns="http://www.google.com">
-    <!-- <packer id="compressor" /> --> <!-- this breaks DLL files "No executable module". Use if you are only obfuscating exe files --> 
+    <packer id="compressor" /> <!-- this breaks DLL files "No executable module". Use if you are only obfuscating exe files --> 
     <rule pattern="true" preset="{{LEVEL}}" inherit="false">
         <protection id="anti ildasm" />
         <protection id="anti debug" action="remove" /> <!-- this breaks Assembly.Load. Maybe just use donut?  -->
@@ -413,6 +413,7 @@ Function Invoke-PrepareAssembly{
         }
 
         $confusedDir = Join-Path $outDir -ChildPath "Confused"
+        Write-Host "[+] confusedDir = $confusedDir"
 
         # TODO: Implement this. If user provided confuserex config file, try opening up and read it 
         if( (Test-Path -Path $confuserConfig -PathType leaf) ){
