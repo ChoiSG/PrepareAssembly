@@ -100,10 +100,10 @@ Function Invoke-PrepareAssembly{
     <rule pattern="true" preset="{{LEVEL}}" inherit="false">
         <protection id="anti ildasm" />
         <protection id="anti debug" action="remove" /> <!-- this breaks Assembly.Load. Maybe just use donut?  -->
-        <protection id="anti dump" />
+        <protection id="anti dump" action="remove" /> <!-- this breaks sharphound --> 
         <protection id="anti tamper" action="remove" /> <!-- this breaks Assembly.Load. Maybe just use donut?  -->
         <protection id="invalid metadata" />
-        <protection id="resources" />
+        <protection id="resources" action="remove" /> <!-- this breaks sharphound --> 
         <protection id="constants" />
         <protection id="ctrl flow" />
         <protection id="rename" action="remove" /> <!-- This just killed seatbelt for some reason --> 
